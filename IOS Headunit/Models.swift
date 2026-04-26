@@ -6,6 +6,19 @@ enum PayloadFormat: String, CaseIterable, Codable {
     case nmea
 }
 
+struct ConnectedDevice: Identifiable {
+    let id: UUID
+    var deviceId: String
+    var connectedAt: Date
+    var disconnectedAt: Date?
+    var dataPacketsSent: Int = 0
+    var lastUpdateTime: Date?
+    var totalBytesSent: Int = 0
+    
+    var isConnected: Bool { disconnectedAt == nil }
+    var connectionDuration: TimeInterval { (disconnectedAt ?? Date()).timeIntervalSince(connectedAt) }
+}
+
 struct CoordinatePayload: Codable, Equatable {
     let lat: Double
     let lon: Double

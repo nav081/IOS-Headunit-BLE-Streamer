@@ -18,6 +18,12 @@ final class LocationProvider: NSObject, ObservableObject {
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.distanceFilter = kCLDistanceFilterNone
     }
+    
+    deinit {
+        timer?.invalidate()
+        timer = nil
+        manager.stopUpdatingLocation()
+    }
 
     func requestPermissions() {
         manager.requestWhenInUseAuthorization()
