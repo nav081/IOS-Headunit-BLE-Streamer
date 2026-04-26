@@ -21,6 +21,7 @@ final class BLEManager: NSObject, ObservableObject {
     private let maxAdvertisingRetryCount = 6
     private var locationQueue: [CLLocation] = []
     private var isProcessingQueue = false
+    private var lastPayload = Data()
     private var deviceMap: [UUID: ConnectedDevice] = [:] // Track devices by UUID
 
     override init() {
@@ -137,6 +138,7 @@ final class BLEManager: NSObject, ObservableObject {
             appendLog("ERROR: Failed to format location data")
             return
         }
+        lastPayload = payload
         
         let success = peripheralManager?.updateValue(payload, for: txCharacteristic, onSubscribedCentrals: nil) ?? false
         if !success {
@@ -233,31 +235,40 @@ extension BLEManager: CBPeripheralManagerDelegate {
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-        connectedCentralCount += 1
+        markDeviceActive(central)
         let deviceId = central.identifier.uuidString.prefix(8)
         let fullUUID = central.identifier.uuidString
-        let device = ConnectedDevice(
-            id: central.identifier,
-            deviceId: String(deviceId),
-            connectedAt: Date()
-        )
-        deviceMap[central.identifier] = device
-        connectedDevices = Array(deviceMap.values).sorted { $0.connectedAt > $1.connectedAt }
         appendLog("🟢 DEVICE SUBSCRIBED: [\(deviceId)] Full UUID: \(fullUUID)")
         appendLog("   Total connected: \(connectedCentralCount) | connectedDevices count: \(connectedDevices.count)")
         print("DEBUG: didSubscribeTo called - Device: \(deviceId), connectedDevices: \(connectedDevices)")
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
-        connectedCentralCount = max(0, connectedCentralCount - 1)
         let deviceId = central.identifier.uuidString.prefix(8)
-        if var device = deviceMap[central.identifier] {
-            device.disconnectedAt = Date()
-            deviceMap[central.identifier] = device
-        }
-        connectedDevices = Array(deviceMap.values).sorted { $0.connectedAt > $1.connectedAt }
+        markDeviceInactive(central)
         appendLog("🔴 DEVICE UNSUBSCRIBED: [\(deviceId)] | Total connected: \(connectedCentralCount)")
         print("DEBUG: didUnsubscribeFrom called - Device: \(deviceId)")
+    }
+
+    func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+        guard request.characteristic.uuid == Self.characteristicUUID else {
+            peripheral.respond(to: request, withResult: .attributeNotFound)
+            return
+        }
+
+        markDeviceActive(request.central)
+
+        let payload = lastPayload
+        guard request.offset <= payload.count else {
+            peripheral.respond(to: request, withResult: .invalidOffset)
+            return
+        }
+
+        request.value = payload.subdata(in: request.offset..<payload.count)
+        peripheral.respond(to: request, withResult: .success)
+
+        let deviceId = request.central.identifier.uuidString.prefix(8)
+        appendLog("📥 READ request from [\(deviceId)] - returned \(request.value?.count ?? 0) bytes")
     }
     
     private func stateDescription(_ state: CBManagerState) -> String {
@@ -280,6 +291,37 @@ extension BLEManager: CBPeripheralManagerDelegate {
         case .allowedAlways: return "Allowed"
         @unknown default: return "Unknown"
         }
+    }
+
+    private func markDeviceActive(_ central: CBCentral) {
+        let deviceId = String(central.identifier.uuidString.prefix(8))
+        if var device = deviceMap[central.identifier] {
+            device.disconnectedAt = nil
+            device.lastUpdateTime = Date()
+            deviceMap[central.identifier] = device
+        } else {
+            deviceMap[central.identifier] = ConnectedDevice(
+                id: central.identifier,
+                deviceId: deviceId,
+                connectedAt: Date(),
+                lastUpdateTime: Date()
+            )
+        }
+        refreshConnectedDevices()
+    }
+
+    private func markDeviceInactive(_ central: CBCentral) {
+        if var device = deviceMap[central.identifier] {
+            device.disconnectedAt = Date()
+            device.lastUpdateTime = Date()
+            deviceMap[central.identifier] = device
+        }
+        refreshConnectedDevices()
+    }
+
+    private func refreshConnectedDevices() {
+        connectedDevices = Array(deviceMap.values).sorted { $0.connectedAt > $1.connectedAt }
+        connectedCentralCount = connectedDevices.filter(\.isConnected).count
     }
 }
 

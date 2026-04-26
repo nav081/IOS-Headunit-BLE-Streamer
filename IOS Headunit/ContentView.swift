@@ -47,7 +47,7 @@ struct ContentView: View {
                             .foregroundColor(controller.bleManager.isAdvertising ? .green : .gray)
                     }
                     HStack {
-                        Text("Connected Devices")
+                        Text("Active Devices")
                         Spacer()
                         Text("\(controller.bleManager.connectedCentralCount)")
                             .fontWeight(.bold)
@@ -98,7 +98,7 @@ struct ContentView: View {
                 }
                 
                 if !controller.bleManager.connectedDevices.isEmpty {
-                    Section("Connected Devices (\(controller.bleManager.connectedDevices.filter { $0.isConnected }.count))") {
+                    Section("Active Devices (\(controller.bleManager.connectedDevices.filter { $0.isConnected }.count))") {
                         ForEach(controller.bleManager.connectedDevices.filter { $0.isConnected }, id: \.id) { device in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
