@@ -185,7 +185,7 @@ extension BLEManager: CBPeripheralManagerDelegate {
         connectedCentralCount += 1
         let deviceId = central.identifier.uuidString.prefix(8)
         let fullUUID = central.identifier.uuidString
-        var device = ConnectedDevice(
+        let device = ConnectedDevice(
             id: central.identifier,
             deviceId: String(deviceId),
             connectedAt: Date()

@@ -58,7 +58,7 @@ final class StreamController: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] location in
                 guard let self, self.isStreaming else {
-                    if !self?.isStreaming ?? false {
+                    if !(self?.isStreaming ?? false) ?? false {
                         self?.bleManager.appendLog("⏸ Location arrived but streaming is OFF")
                     }
                     return
