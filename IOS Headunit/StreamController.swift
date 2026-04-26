@@ -6,8 +6,7 @@ final class StreamController: ObservableObject {
     @Published var isStreaming = false
     @Published var reconnectDelay: TimeInterval = 1
     @Published var locationProvider: LocationProvider
-
-    let bleManager: BLEManager
+    @Published var bleManager: BLEManager
     
     private var cancellables = Set<AnyCancellable>()
     private let userDefaults = UserDefaults.standard
@@ -17,6 +16,9 @@ final class StreamController: ObservableObject {
     init(bleManager: BLEManager = .init(), locationProvider: LocationProvider = .init()) {
         self.bleManager = bleManager
         self.locationProvider = locationProvider
+        bleManager.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
         loadPersistedState()
         bind()
     }

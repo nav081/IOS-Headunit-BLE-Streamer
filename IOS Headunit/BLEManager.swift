@@ -15,30 +15,46 @@ final class BLEManager: NSObject, ObservableObject {
     private var peripheralManager: CBPeripheralManager?
     private var txCharacteristic: CBMutableCharacteristic?
     private var isCharacteristicReady = false
+    private var advertisingRequested = false
+    private var advertisingRetryCount = 0
+    private let maxAdvertisingRetryCount = 6
     private var locationQueue: [CLLocation] = []
     private var isProcessingQueue = false
     private var deviceMap: [UUID: ConnectedDevice] = [:] // Track devices by UUID
-    private var pendingAdvertisingStart = false // Flag to retry when BLE is ready
 
     override init() {
         super.init()
+        appendLog("🧩 BLEManager initialized, creating peripheral manager")
         peripheralManager = CBPeripheralManager(delegate: self, queue: .main)
     }
 
     func startAdvertising() {
+        advertisingRequested = true
+        advertisingRetryCount = 0
         guard let peripheralManager else {
             appendLog("❌ ERROR: peripheralManager is nil")
             return
         }
-        
-        // If BLE is not ready yet, mark as pending and it will start when BLE becomes ready
-        if peripheralManager.state != .poweredOn {
-            appendLog("⚠️ BLE not ready yet (state: \(stateDescription(peripheralManager.state)))")
-            appendLog("   Marking advertising as pending... will start when BLE powers on")
-            pendingAdvertisingStart = true
+        appendLog("▶️ startAdvertising called - current BLE state: \(stateDescription(peripheralManager.state))")
+        guard peripheralManager.state == .poweredOn else {
+            if peripheralManager.state == .unknown {
+                appendLog("⏳ Bluetooth state unknown, waiting for poweredOn")
+                scheduleAdvertisingRetry()
+            } else {
+                appendLog("⚠️ Bluetooth not ready (state: \(stateDescription(peripheralManager.state))) - waiting for poweredOn")
+            }
             return
         }
-        
+        beginAdvertising()
+    }
+
+    private func beginAdvertising() {
+        guard let peripheralManager else { return }
+        guard !isAdvertising else {
+            appendLog("ℹ️ Already advertising")
+            return
+        }
+
         appendLog("🚀 Starting advertising...")
 
         if txCharacteristic == nil {
@@ -64,8 +80,35 @@ final class BLEManager: NSObject, ObservableObject {
         }
     }
 
+    private func scheduleAdvertisingRetry(after delay: TimeInterval = 1.0) {
+        guard advertisingRequested else { return }
+        guard advertisingRetryCount < maxAdvertisingRetryCount else {
+            appendLog("❌ BLE advertising retry limit reached")
+            return
+        }
+        advertisingRetryCount += 1
+        let retryNumber = advertisingRetryCount
+        appendLog("⏱ Scheduling advertising retry #\(retryNumber) in \(Int(delay))s")
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.advertisingRequested else { return }
+            guard let peripheralManager = self.peripheralManager else {
+                self.appendLog("❌ No peripheral manager available for retry")
+                return
+            }
+            self.appendLog("🔁 Retry #\(retryNumber): checking BLE state again (\(self.stateDescription(peripheralManager.state)))")
+            if peripheralManager.state == .poweredOn {
+                self.beginAdvertising()
+            } else if peripheralManager.state == .unknown {
+                self.scheduleAdvertisingRetry(after: min(2.0, delay * 2))
+            } else {
+                self.appendLog("⚠️ BLE still not ready after retry (state: \(self.stateDescription(peripheralManager.state)))")
+            }
+        }
+    }
+
     func stopAdvertising() {
         peripheralManager?.stopAdvertising()
+        advertisingRequested = false
         isAdvertising = false
         isCharacteristicReady = false
         appendLog("Advertising stopped")
@@ -155,13 +198,16 @@ extension BLEManager: CBPeripheralManagerDelegate {
         if peripheral.state != .poweredOn {
             isCharacteristicReady = false
             appendLog("⚠️ BLE not powered on, characteristic marked not ready")
+            if peripheral.state == .unknown && advertisingRequested {
+                appendLog("⏳ BLE state still unknown, retrying advertising soon")
+                scheduleAdvertisingRetry()
+            }
         } else {
             appendLog("✅ BLE powered on, ready to advertise")
-            // If advertising was requested but couldn't start due to BLE not being ready, start it now
-            if pendingAdvertisingStart {
-                appendLog("🔄 Resuming pending advertising startup...")
-                pendingAdvertisingStart = false
-                startAdvertising()
+            advertisingRetryCount = 0
+            if advertisingRequested {
+                appendLog("🔁 Resuming pending advertising now that Bluetooth is powered on")
+                beginAdvertising()
             }
         }
     }
