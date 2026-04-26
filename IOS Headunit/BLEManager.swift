@@ -18,6 +18,7 @@ final class BLEManager: NSObject, ObservableObject {
     private var locationQueue: [CLLocation] = []
     private var isProcessingQueue = false
     private var deviceMap: [UUID: ConnectedDevice] = [:] // Track devices by UUID
+    private var pendingAdvertisingStart = false // Flag to retry when BLE is ready
 
     override init() {
         super.init()
@@ -29,8 +30,12 @@ final class BLEManager: NSObject, ObservableObject {
             appendLog("❌ ERROR: peripheralManager is nil")
             return
         }
-        guard peripheralManager.state == .poweredOn else {
-            appendLog("⚠️ Bluetooth not ready (state: \(stateDescription(peripheralManager.state)))")
+        
+        // If BLE is not ready yet, mark as pending and it will start when BLE becomes ready
+        if peripheralManager.state != .poweredOn {
+            appendLog("⚠️ BLE not ready yet (state: \(stateDescription(peripheralManager.state)))")
+            appendLog("   Marking advertising as pending... will start when BLE powers on")
+            pendingAdvertisingStart = true
             return
         }
         
@@ -152,6 +157,12 @@ extension BLEManager: CBPeripheralManagerDelegate {
             appendLog("⚠️ BLE not powered on, characteristic marked not ready")
         } else {
             appendLog("✅ BLE powered on, ready to advertise")
+            // If advertising was requested but couldn't start due to BLE not being ready, start it now
+            if pendingAdvertisingStart {
+                appendLog("🔄 Resuming pending advertising startup...")
+                pendingAdvertisingStart = false
+                startAdvertising()
+            }
         }
     }
     
