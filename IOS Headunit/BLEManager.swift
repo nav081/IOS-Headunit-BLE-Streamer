@@ -25,13 +25,19 @@ final class BLEManager: NSObject, ObservableObject {
     }
 
     func startAdvertising() {
-        guard let peripheralManager else { return }
-        guard peripheralManager.state == .poweredOn else {
-            appendLog("Bluetooth not ready")
+        guard let peripheralManager else {
+            appendLog("❌ ERROR: peripheralManager is nil")
             return
         }
+        guard peripheralManager.state == .poweredOn else {
+            appendLog("⚠️ Bluetooth not ready (state: \(stateDescription(peripheralManager.state)))")
+            return
+        }
+        
+        appendLog("🚀 Starting advertising...")
 
         if txCharacteristic == nil {
+            appendLog("📝 Creating service and characteristic...")
             let characteristic = CBMutableCharacteristic(
                 type: Self.characteristicUUID,
                 properties: [.notify, .read],
@@ -41,12 +47,16 @@ final class BLEManager: NSObject, ObservableObject {
             txCharacteristic = characteristic
             let service = CBMutableService(type: Self.serviceUUID, primary: true)
             service.characteristics = [characteristic]
+            appendLog("   Service UUID: \(Self.serviceUUID.uuidString)")
+            appendLog("   Characteristic UUID: \(Self.characteristicUUID.uuidString)")
             peripheralManager.add(service)
+            appendLog("   ✓ Service added (waiting for didAdd callback)")
+        } else {
+            appendLog("   ℹ️ Service/characteristic already created")
+            peripheralManager.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]])
+            isAdvertising = true
+            appendLog("   ✓ Advertising started")
         }
-
-        peripheralManager.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]])
-        isAdvertising = true
-        appendLog("Advertising started")
     }
 
     func stopAdvertising() {
@@ -58,10 +68,11 @@ final class BLEManager: NSObject, ObservableObject {
 
     func stream(location: CLLocation, format: PayloadFormat) {
         guard isCharacteristicReady, let txCharacteristic else {
-            appendLog("Queueing location: characteristic not ready")
+            appendLog("⚠️ Queueing location: characteristic not ready (isReady=\(isCharacteristicReady), hasTx=\(txCharacteristic != nil))")
             locationQueue.append(location)
             return
         }
+        appendLog("✓ Characteristic ready, processing location")
         processLocationWithFormat(location, format: format)
     }
     
@@ -135,25 +146,34 @@ final class BLEManager: NSObject, ObservableObject {
 extension BLEManager: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         let stateStr = stateDescription(peripheral.state)
-        appendLog("BLE state: \(stateStr)")
+        appendLog("🔵 BLE state changed to: \(stateStr)")
         if peripheral.state != .poweredOn {
             isCharacteristicReady = false
+            appendLog("⚠️ BLE not powered on, characteristic marked not ready")
+        } else {
+            appendLog("✅ BLE powered on, ready to advertise")
         }
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error = error {
-            appendLog("ERROR: Failed to add service: \(error.localizedDescription)")
+            appendLog("❌ ERROR: Failed to add service: \(error.localizedDescription)")
             isCharacteristicReady = false
         } else {
             isCharacteristicReady = true
-            appendLog("Service added successfully, characteristic ready")
+            appendLog("📡 Service added successfully!")
+            appendLog("   Starting advertising...")
+            guard let peripheralManager = self.peripheralManager else { return }
+            peripheralManager.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]])
+            isAdvertising = true
+            appendLog("   ✓ Advertising started")
         }
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
         connectedCentralCount += 1
         let deviceId = central.identifier.uuidString.prefix(8)
+        let fullUUID = central.identifier.uuidString
         var device = ConnectedDevice(
             id: central.identifier,
             deviceId: String(deviceId),
@@ -161,7 +181,9 @@ extension BLEManager: CBPeripheralManagerDelegate {
         )
         deviceMap[central.identifier] = device
         connectedDevices = Array(deviceMap.values).sorted { $0.connectedAt > $1.connectedAt }
-        appendLog("✓ BLUETOOTH: Device [\(deviceId)] CONNECTED (Central) | Total connected: \(connectedCentralCount)")
+        appendLog("🟢 DEVICE SUBSCRIBED: [\(deviceId)] Full UUID: \(fullUUID)")
+        appendLog("   Total connected: \(connectedCentralCount) | connectedDevices count: \(connectedDevices.count)")
+        print("DEBUG: didSubscribeTo called - Device: \(deviceId), connectedDevices: \(connectedDevices)")
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
@@ -172,7 +194,8 @@ extension BLEManager: CBPeripheralManagerDelegate {
             deviceMap[central.identifier] = device
         }
         connectedDevices = Array(deviceMap.values).sorted { $0.connectedAt > $1.connectedAt }
-        appendLog("✗ BLUETOOTH: Device [\(deviceId)] DISCONNECTED | Total connected: \(connectedCentralCount)")
+        appendLog("🔴 DEVICE UNSUBSCRIBED: [\(deviceId)] | Total connected: \(connectedCentralCount)")
+        print("DEBUG: didUnsubscribeFrom called - Device: \(deviceId)")
     }
     
     private func stateDescription(_ state: CBManagerState) -> String {

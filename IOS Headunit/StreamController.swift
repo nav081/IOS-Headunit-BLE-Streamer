@@ -57,7 +57,13 @@ final class StreamController: ObservableObject {
         locationProvider.$latestLocation
             .compactMap { $0 }
             .sink { [weak self] location in
-                guard let self, self.isStreaming else { return }
+                guard let self, self.isStreaming else {
+                    if !self?.isStreaming ?? false {
+                        self?.bleManager.appendLog("⏸ Location arrived but streaming is OFF")
+                    }
+                    return
+                }
+                self.bleManager.appendLog("📤 Sending location via BLE...")
                 self.bleManager.stream(location: location, format: self.selectedFormat)
             }
             .store(in: &cancellables)
