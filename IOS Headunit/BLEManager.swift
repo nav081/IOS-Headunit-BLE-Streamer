@@ -11,6 +11,7 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var connectedCentralCount = 0
     @Published var logs: [String] = []
     @Published var connectedDevices: [ConnectedDevice] = []
+    @Published var authorizationStatus: CBManagerAuthorization = .notDetermined
 
     private var peripheralManager: CBPeripheralManager?
     private var txCharacteristic: CBMutableCharacteristic?
@@ -24,7 +25,9 @@ final class BLEManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        authorizationStatus = CBManager.authorization
         appendLog("🧩 BLEManager initialized, creating peripheral manager")
+        appendLog("🔐 Bluetooth authorization: \(authorizationDescription(authorizationStatus))")
         peripheralManager = CBPeripheralManager(delegate: self, queue: .main)
     }
 
@@ -193,8 +196,10 @@ final class BLEManager: NSObject, ObservableObject {
 
 extension BLEManager: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+        authorizationStatus = CBManager.authorization
         let stateStr = stateDescription(peripheral.state)
         appendLog("🔵 BLE state changed to: \(stateStr)")
+        appendLog("🔐 Bluetooth authorization: \(authorizationDescription(authorizationStatus))")
         if peripheral.state != .poweredOn {
             isCharacteristicReady = false
             appendLog("⚠️ BLE not powered on, characteristic marked not ready")
@@ -263,6 +268,16 @@ extension BLEManager: CBPeripheralManagerDelegate {
         case .unauthorized: return "Unauthorized"
         case .poweredOff: return "PoweredOff"
         case .poweredOn: return "PoweredOn"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private func authorizationDescription(_ status: CBManagerAuthorization) -> String {
+        switch status {
+        case .notDetermined: return "Not Determined"
+        case .restricted: return "Restricted"
+        case .denied: return "Denied"
+        case .allowedAlways: return "Allowed"
         @unknown default: return "Unknown"
         }
     }

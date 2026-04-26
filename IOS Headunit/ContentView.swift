@@ -28,6 +28,19 @@ struct ContentView: View {
                             .fontWeight(.bold)
                     }
                     HStack {
+                        Text("Bluetooth Permission")
+                        Spacer()
+                        Text(bluetoothPermissionText)
+                            .foregroundColor(bluetoothPermissionColor)
+                            .fontWeight(.semibold)
+                    }
+                    HStack {
+                        Text("Bluetooth State")
+                        Spacer()
+                        Text(bluetoothStateText)
+                            .foregroundColor(bluetoothStateColor)
+                    }
+                    HStack {
                         Text("Advertising")
                         Spacer()
                         Text(controller.bleManager.isAdvertising ? "✓ Yes" : "✗ No")
@@ -187,5 +200,41 @@ struct ContentView: View {
             return "\(mins)m \(secs)s"
         }
         return "\(secs)s"
+    }
+
+    private var bluetoothPermissionText: String {
+        switch controller.bleManager.authorizationStatus {
+        case .allowedAlways:
+            return "Allowed"
+        case .denied:
+            return "Denied"
+        case .restricted:
+            return "Restricted"
+        case .notDetermined:
+            return "Not Determined"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    private var bluetoothPermissionColor: Color {
+        switch controller.bleManager.authorizationStatus {
+        case .allowedAlways:
+            return .green
+        case .denied, .restricted:
+            return .red
+        case .notDetermined:
+            return .orange
+        @unknown default:
+            return .gray
+        }
+    }
+
+    private var bluetoothStateText: String {
+        controller.bleManager.isAdvertising ? "Powered On" : "Waiting / Off"
+    }
+
+    private var bluetoothStateColor: Color {
+        controller.bleManager.isAdvertising ? .green : .gray
     }
 }
