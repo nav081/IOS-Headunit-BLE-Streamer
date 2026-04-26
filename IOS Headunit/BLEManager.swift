@@ -6,6 +6,7 @@ import Combine
 final class BLEManager: NSObject, ObservableObject {
     static let serviceUUID = CBUUID(string: "0000feed-0000-1000-8000-00805f9b34fb")
     static let characteristicUUID = CBUUID(string: "0000beef-0000-1000-8000-00805f9b34fb")
+    static let advertisedLocalName = "Headunit GPS"
 
     @Published var isAdvertising = false
     @Published var connectedCentralCount = 0
@@ -78,7 +79,7 @@ final class BLEManager: NSObject, ObservableObject {
             appendLog("   ✓ Service added (waiting for didAdd callback)")
         } else {
             appendLog("   ℹ️ Service/characteristic already created")
-            peripheralManager.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]])
+            peripheralManager.startAdvertising(advertisementData())
             isAdvertising = true
             appendLog("   ✓ Advertising started")
         }
@@ -228,7 +229,7 @@ extension BLEManager: CBPeripheralManagerDelegate {
             appendLog("📡 Service added successfully!")
             appendLog("   Starting advertising...")
             guard let peripheralManager = self.peripheralManager else { return }
-            peripheralManager.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]])
+            peripheralManager.startAdvertising(advertisementData())
             isAdvertising = true
             appendLog("   ✓ Advertising started")
         }
@@ -322,6 +323,13 @@ extension BLEManager: CBPeripheralManagerDelegate {
     private func refreshConnectedDevices() {
         connectedDevices = Array(deviceMap.values).sorted { $0.connectedAt > $1.connectedAt }
         connectedCentralCount = connectedDevices.filter(\.isConnected).count
+    }
+
+    private func advertisementData() -> [String: Any] {
+        [
+            CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID],
+            CBAdvertisementDataLocalNameKey: Self.advertisedLocalName
+        ]
     }
 }
 
