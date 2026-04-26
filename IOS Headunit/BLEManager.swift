@@ -99,6 +99,10 @@ final class BLEManager: NSObject, ObservableObject {
     private func processQueuedLocations(format: PayloadFormat) {
         guard !isProcessingQueue else { return }
         isProcessingQueue = true
+        guard let txCharacteristic else{
+            isProcessingQueue = false
+            return
+        }
         
         while !locationQueue.isEmpty && connectedCentralCount > 0 {
             let location = locationQueue.removeFirst()
@@ -171,7 +175,7 @@ extension BLEManager: CBPeripheralManagerDelegate {
         appendLog("✗ BLUETOOTH: Device [\(deviceId)] DISCONNECTED | Total connected: \(connectedCentralCount)")
     }
     
-    private func stateDescription(_ state: CBPeripheralManagerState) -> String {
+    private func stateDescription(_ state: CBManagerState) -> String {
         switch state {
         case .unknown: return "Unknown"
         case .resetting: return "Resetting"
