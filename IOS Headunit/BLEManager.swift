@@ -66,9 +66,9 @@ final class BLEManager: NSObject, ObservableObject {
             appendLog("📝 Creating service and characteristic...")
             let characteristic = CBMutableCharacteristic(
                 type: Self.characteristicUUID,
-                properties: [.notify, .read],
+                properties: [.notify],
                 value: nil,
-                permissions: [.readable]
+                permissions: []
             )
             txCharacteristic = characteristic
             let service = CBMutableService(type: Self.serviceUUID, primary: true)
